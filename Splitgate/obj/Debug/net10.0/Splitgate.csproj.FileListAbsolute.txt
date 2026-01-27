@@ -1,0 +1,14 @@
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.exe
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.deps.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.runtimeconfig.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.dll
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.pdb
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.GeneratedMSBuildEditorConfig.editorconfig
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.AssemblyInfoInputs.cache
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.AssemblyInfo.cs
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.csproj.CoreCompileInputs.cache
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.dll
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\refint\Splitgate.dll
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.pdb
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.genruntimeconfig.cache
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\ref\Splitgate.dll
