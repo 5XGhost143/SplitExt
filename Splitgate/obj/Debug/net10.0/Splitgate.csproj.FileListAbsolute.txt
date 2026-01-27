@@ -1,8 +1,8 @@
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.exe
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.deps.json
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.runtimeconfig.json
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.dll
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\Splitgate.pdb
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\word.exe
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\word.deps.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\word.runtimeconfig.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\word.dll
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\word.pdb
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\ClickableTransparentOverlay.dll
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\ImGui.NET.dll
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\SharpGen.Runtime.dll
@@ -25,8 +25,8 @@ E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.AssemblyInfo.cs
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.csproj.CoreCompileInputs.cache
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.sourcelink.json
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.csproj.Up2Date
-E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.dll
-E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\refint\Splitgate.dll
-E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.pdb
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\word.dll
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\refint\word.dll
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\word.pdb
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.genruntimeconfig.cache
-E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\ref\Splitgate.dll
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\ref\word.dll

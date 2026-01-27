@@ -455,7 +455,7 @@
     "version": "1.0.0",
     "restore": {
       "projectUniqueName": "E:\\.Projects\\Splitgate\\Splitgate\\Splitgate.csproj",
-      "projectName": "Splitgate",
+      "projectName": "word",
       "projectPath": "E:\\.Projects\\Splitgate\\Splitgate\\Splitgate.csproj",
       "packagesPath": "C:\\Users\\Ghost143\\.nuget\\packages\\",
       "outputPath": "E:\\.Projects\\Splitgate\\Splitgate\\obj\\",
@@ -801,7 +801,7 @@
       "code": "NU1603",
       "level": "Warning",
       "warningLevel": 1,
-      "message": "Splitgate depends on ClickableTransparentOverlay (>= 8.1.2) but ClickableTransparentOverlay 8.1.2 was not found. ClickableTransparentOverlay 9.0.0 was resolved instead.",
+      "message": "word depends on ClickableTransparentOverlay (>= 8.1.2) but ClickableTransparentOverlay 8.1.2 was not found. ClickableTransparentOverlay 9.0.0 was resolved instead.",
       "libraryId": "ClickableTransparentOverlay",
       "targetGraphs": [
         "net10.0"

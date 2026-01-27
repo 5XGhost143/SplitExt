@@ -42,6 +42,7 @@ namespace SplitExt
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
         [DllImport("kernel32.dll")]
         private static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int dwSize, out int lpNumberOfBytesRead);
+
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
 
@@ -152,6 +153,8 @@ namespace SplitExt
                 ImGui.Separator();
                 ImGui.Checkbox("Enemy Trace Lines", ref enableTraceLines);
                 ImGui.Checkbox("Enemy Boxes", ref enableBoxes);
+                ImGui.Separator();
+                ImGui.Text("GitHub: github.com/5XGhost143/SplitExt");
                 ImGui.End();
             }
         }
