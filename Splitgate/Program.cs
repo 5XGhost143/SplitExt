@@ -2,324 +2,506 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Numerics;
+using ImGuiNET;
+using ClickableTransparentOverlay;
+using System.Collections.Generic;
 
 namespace SplitExt
 {
-    class External_Main
+    public struct PlayerInfo
+    {
+        public Vector3 Position;
+        public bool IsEnemy;
+        public byte TeamId;
+        public float Distance;
+    }
+
+    class External_Main : Overlay
     {
         private const string PROCESS_NAME = "PortalWars-Win64-Shipping";
         
-        private const long OFFSET_GNAMES = 0x571af40;
-        private const long OFFSET_GOBJECTS = 0x57574f0;
+        // Offsets
         private const long OFFSET_GWORLD = 0x589cb60;
         private const int OFFSET_OwningGameInstance = 0x180;
         private const int OFFSET_LocalPlayers = 0x38;
         private const int OFFSET_PlayerController = 0x30;
         private const int OFFSET_AcknowledgedPawn = 0x2a0;
-        private const int OFFSET_PlayerStateOffset = 0x240;
         private const int OFFSET_RootComponent = 0x130;
         private const int OFFSET_RelativeLocation = 0x11C;
         private const int OFFSET_GameState = 0x120;
         private const int OFFSET_PlayerArray = 0x238;
         private const int OFFSET_PawnPrivate = 0x280;
         private const int OFFSET_TeamNum = 0x338;
-        private const int OFFSET_ControlRotation = 0x288;
         private const int OFFSET_PlayerCameraManager = 0x2b8;
-        private const int OFFSET_CameraCache = 0x290;
+        private const int OFFSET_CameraCache = 0x290; // Base offset to try first
+        
+        private static int foundCameraOffset = -1; // Cache the working offset
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
-
         [DllImport("kernel32.dll")]
         private static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int dwSize, out int lpNumberOfBytesRead);
-
-        [DllImport("kernel32.dll")]
-        private static extern bool CloseHandle(IntPtr hObject);
-
-        private const int PROCESS_VM_READ = 0x0010;
-        private const int PROCESS_QUERY_INFORMATION = 0x0400;
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
 
         private IntPtr processHandle;
         private IntPtr baseAddress;
         private int cachedLocalTeamId = -1;
+        private int screenWidth = 1920;
+        private int screenHeight = 1080;
 
-        static void Main(string[] args)
+        private List<PlayerInfo> players = new List<PlayerInfo>();
+        private Vector3 localPosition;
+        private Vector3 cameraRotation;
+        private Vector3 cameraPosition;
+        private float cameraFov = 90f;
+
+        private bool showMenu = true;
+        private bool insertKeyPressed = false;
+        private bool enableTraceLines = true;
+        private bool enableBoxes = false;
+
+        public External_Main() : base()
         {
-            var ext = new External_Main();
-            ext.Run();
-        }
-
-        private void Run()
-        {
-
             if (!AttachToProcess())
             {
-                Console.WriteLine($"[-] Failed to attach to {PROCESS_NAME}.exe");
-                Console.ReadKey();
-                return;
+                Console.WriteLine("[-] Failed to attach to game.");
+                Environment.Exit(1);
             }
+            Console.Clear();
+            Console.WriteLine("[+] Debug Console Active");
+        }
 
-            Console.WriteLine($"[+] Process: {PROCESS_NAME}.exe");
-            Console.WriteLine($"[+] Base Address: 0x{baseAddress:X}");
-            Console.WriteLine();
-            PrintOffsets();
-            Console.WriteLine("\n[INFO] Press ESC to exit\n");
-            Thread.Sleep(2000);
+        static void Main(string[] args) => new External_Main().Start().Wait();
 
-            try
+        protected override void Render()
+        {
+            // 1. Update Inputs & Screen
+            HandleInput();
+            var io = ImGui.GetIO();
+            screenWidth = (int)io.DisplaySize.X;
+            screenHeight = (int)io.DisplaySize.Y;
+
+            // 2. Update game data
+            UpdateGameData();
+            PrintConsoleDebug();
+
+            // 3. ImGui Overlay Drawing
+            ImGui.SetNextWindowPos(new Vector2(0, 0));
+            ImGui.SetNextWindowSize(new Vector2(screenWidth, screenHeight));
+            ImGui.Begin("##Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoInputs);
+            
+            var drawList = ImGui.GetWindowDrawList();
+            
+            // Draw crosshair for reference
+            Vector2 center = new Vector2(screenWidth / 2, screenHeight / 2);
+            drawList.AddCircle(center, 3f, 0xFF00FF00, 12, 2f);
+
+            if (enableTraceLines || enableBoxes)
             {
-                while (true)
+                foreach (var player in players)
                 {
-                    UpdateAndDisplay();
-                    Thread.Sleep(800);
-
-                    if (Console.KeyAvailable && Console.ReadKey(true).Key == ConsoleKey.Escape)
+                    if (player.IsEnemy && WorldToScreen(player.Position, out Vector2 screenPos))
                     {
-                        break;
+                        // Check if position is on screen
+                        if (screenPos.X >= 0 && screenPos.X <= screenWidth && 
+                            screenPos.Y >= 0 && screenPos.Y <= screenHeight)
+                        {
+                            if (enableTraceLines)
+                            {
+                                // Draw red trace line from bottom center to enemy feet
+                                Vector2 bottomCenter = new Vector2(screenWidth / 2, screenHeight);
+                                drawList.AddLine(bottomCenter, screenPos, 0xFF0000FF, 2.0f);
+                            }
+
+                            if (enableBoxes)
+                            {
+                                // Calculate head position (approximate +70 units up in world space)
+                                Vector3 headPos = player.Position;
+                                headPos.Z += 70f;
+                                
+                                if (WorldToScreen(headPos, out Vector2 headScreen))
+                                {
+                                    float height = Math.Abs(headScreen.Y - screenPos.Y);
+                                    float width = height * 0.4f;
+
+                                    Vector2 topLeft = new Vector2(screenPos.X - width / 2, headScreen.Y);
+                                    Vector2 bottomRight = new Vector2(screenPos.X + width / 2, screenPos.Y);
+
+                                    // Draw box
+                                    drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
+                                    
+                                    // Draw distance text
+                                    string distText = $"{player.Distance:F0}m";
+                                    Vector2 textPos = new Vector2(screenPos.X - 15, topLeft.Y - 15);
+                                    drawList.AddText(textPos, 0xFFFFFFFF, distText);
+                                }
+                            }
+                        }
                     }
                 }
             }
-            finally
+            ImGui.End();
+
+            if (showMenu)
             {
-                CloseHandle(processHandle);
-                Console.WriteLine("\n[-] Closed.");
+                ImGui.Begin("SplitExt", ref showMenu, ImGuiWindowFlags.AlwaysAutoResize);
+                ImGui.Text($"Camera FOV: {cameraFov:F1}");
+                ImGui.Text($"Local Team: {cachedLocalTeamId}");
+                ImGui.Separator();
+                ImGui.Checkbox("Enemy Trace Lines", ref enableTraceLines);
+                ImGui.Checkbox("Enemy Boxes", ref enableBoxes);
+                ImGui.End();
             }
         }
 
-        private bool AttachToProcess()
+        private void PrintConsoleDebug()
         {
-            var processes = Process.GetProcessesByName(PROCESS_NAME);
-            if (processes.Length == 0)
-                return false;
+            // Only update console occasionally to prevent flickering
+            if (DateTime.Now.Millisecond % 500 > 10) return; 
 
-            var process = processes[0];
-            processHandle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, process.Id);
+            Console.SetCursorPosition(0, 0);
+            Console.WriteLine("═══════════════════════════════════════");
+            Console.WriteLine($"LOCAL POS: X:{localPosition.X,8:F0} Y:{localPosition.Y,8:F0} Z:{localPosition.Z,8:F0}");
+            Console.WriteLine($"CAMERA   : X:{cameraPosition.X,8:F0} Y:{cameraPosition.Y,8:F0} Z:{cameraPosition.Z,8:F0}");
+            Console.WriteLine($"ROTATION : P:{cameraRotation.X,7:F1}° Y:{cameraRotation.Y,7:F1}° R:{cameraRotation.Z,7:F1}°");
+            Console.WriteLine($"FOV      : {cameraFov:F1}° | Offset: {(foundCameraOffset == -1 ? "Scanning..." : $"0x{foundCameraOffset:X}")}");
+            Console.WriteLine($"TEAM ID  : {(cachedLocalTeamId == -1 ? "Scanning..." : cachedLocalTeamId.ToString())}");
+            Console.WriteLine("═══════════════════════════════════════");
             
-            if (processHandle == IntPtr.Zero)
-                return false;
-
-            baseAddress = process.MainModule?.BaseAddress ?? IntPtr.Zero;
-            return baseAddress != IntPtr.Zero;
+            int enemies = 0;
+            int teammates = 0;
+            foreach (var p in players)
+            {
+                if (p.IsEnemy)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[ENEMY] Dist: {p.Distance,5:F0}m | Team: {p.TeamId} | Pos: ({p.Position.X:F0}, {p.Position.Y:F0}, {p.Position.Z:F0})");
+                    enemies++;
+                }
+                else if (p.TeamId == cachedLocalTeamId)
+                {
+                    teammates++;
+                }
+            }
+            Console.ResetColor();
+            Console.WriteLine($"\nTracking {enemies} enemies, {teammates} teammates        ");
+            Console.WriteLine("                                        "); // Clear line
         }
 
-        private void PrintOffsets()
+        private void UpdateGameData()
         {
-            Console.WriteLine("[+] Offsets:");
-            Console.WriteLine($"[OFFSET] OFFSET_GNAMES              = 0x{OFFSET_GNAMES:X}");
-            Console.WriteLine($"[OFFSET] OFFSET_GOBJECTS            = 0x{OFFSET_GOBJECTS:X}");
-            Console.WriteLine($"[OFFSET] OFFSET_GWORLD              = 0x{OFFSET_GWORLD:X}");
-            Console.WriteLine($"[OFFSET] OwningGameInstance         = 0x{OFFSET_OwningGameInstance:X}");
-            Console.WriteLine($"[OFFSET] LocalPlayers               = 0x{OFFSET_LocalPlayers:X}");
-            Console.WriteLine($"[OFFSET] PlayerController           = 0x{OFFSET_PlayerController:X}");
-            Console.WriteLine($"[OFFSET] AcknowledgedPawn           = 0x{OFFSET_AcknowledgedPawn:X}");
-            Console.WriteLine($"[OFFSET] PlayerStateOffset          = 0x{OFFSET_PlayerStateOffset:X}");
-            Console.WriteLine($"[OFFSET] RootComponent              = 0x{OFFSET_RootComponent:X}");
-            Console.WriteLine($"[OFFSET] RelativeLocation           = 0x{OFFSET_RelativeLocation:X}");
-            Console.WriteLine($"[OFFSET] GameState                  = 0x{OFFSET_GameState:X}");
-            Console.WriteLine($"[OFFSET] PlayerArray                = 0x{OFFSET_PlayerArray:X}");
-            Console.WriteLine($"[OFFSET] PawnPrivate                = 0x{OFFSET_PawnPrivate:X}");
-            Console.WriteLine($"[OFFSET] TeamNum                    = 0x{OFFSET_TeamNum:X}");
-            Console.WriteLine($"[OFFSET] ControlRotation            = 0x{OFFSET_ControlRotation:X}");
-            Console.WriteLine($"[OFFSET] PlayerCameraManager        = 0x{OFFSET_PlayerCameraManager:X}");
-            Console.WriteLine($"[OFFSET] CameraCache                = 0x{OFFSET_CameraCache:X}");
-        }
-
-        private void UpdateAndDisplay()
-        {
+            players.Clear();
             try
             {
-                long gworld = ReadInt64(baseAddress + OFFSET_GWORLD);
+                long gworld = ReadInt64((long)baseAddress + OFFSET_GWORLD);
                 if (gworld == 0) return;
 
                 long gameInstance = ReadInt64(gworld + OFFSET_OwningGameInstance);
                 if (gameInstance == 0) return;
 
-                long localPlayers = ReadInt64(gameInstance + OFFSET_LocalPlayers);
-                if (localPlayers == 0) return;
-
-                long localPlayer = ReadInt64(localPlayers);
+                long localPlayer = ReadInt64(ReadInt64(gameInstance + OFFSET_LocalPlayers));
                 if (localPlayer == 0) return;
 
                 long playerController = ReadInt64(localPlayer + OFFSET_PlayerController);
                 if (playerController == 0) return;
 
                 long localPawn = ReadInt64(playerController + OFFSET_AcknowledgedPawn);
-                if (localPawn == 0)
+
+                // Read camera data from PlayerCameraManager
+                long camMgr = ReadInt64(playerController + OFFSET_PlayerCameraManager);
+                if (camMgr != 0)
                 {
-                    // Reset cached team when pawn becomes 0 (lobby/respawn)
-                    cachedLocalTeamId = -1;
-                    return;
-                }
-
-                long localRoot = ReadInt64(localPawn + OFFSET_RootComponent);
-                if (localRoot == 0) return;
-
-                var localPos = ReadVector3(localRoot + OFFSET_RelativeLocation);
-
-                // Only determine team if not already cached
-                if (cachedLocalTeamId == -1)
-                {
-                    long gameState = ReadInt64(gworld + OFFSET_GameState);
-                    if (gameState != 0)
+                    bool foundValidCamera = false;
+                    
+                    // If we haven't found valid camera yet, scan systematically
+                    if (foundCameraOffset == -1)
                     {
-                        long playerArrayAddr = gameState + OFFSET_PlayerArray;
-                        long dataPtr = ReadInt64(playerArrayAddr);
-                        int count = ReadInt32(playerArrayAddr + 0x8);
-
-                        if (dataPtr != 0 && count > 0 && count <= 100)
+                        // Scan through PlayerCameraManager structure in 4-byte increments
+                        // Looking for position data that matches player position closely
+                        for (int offset = 0; offset < 0x2000; offset += 0x4)
                         {
-                            for (int i = 0; i < count; i++)
+                            Vector3 testPos = ReadVector3(camMgr + offset);
+                            
+                            // Check if this looks like a valid position near the player
+                            if (!float.IsNaN(testPos.X) && !float.IsNaN(testPos.Y) && !float.IsNaN(testPos.Z))
                             {
-                                try
+                                float distToPlayer = Vector3.Distance(testPos, localPosition);
+                                
+                                // Camera should be within 200 units of player (accounting for eye height)
+                                if (distToPlayer < 200 && distToPlayer > 0.1f)
                                 {
-                                    long playerState = ReadInt64(dataPtr + i * 8);
-                                    if (playerState == 0) continue;
-
-                                    long pawn = ReadInt64(playerState + OFFSET_PawnPrivate);
-                                    if (pawn == 0) continue;
-
-                                    long root = ReadInt64(pawn + OFFSET_RootComponent);
-                                    if (root == 0) continue;
-
-                                    var pos = ReadVector3(root + OFFSET_RelativeLocation);
-
-                                    if (Math.Abs(pos.X - localPos.X) < 1f &&
-                                        Math.Abs(pos.Y - localPos.Y) < 1f &&
-                                        Math.Abs(pos.Z - localPos.Z) < 1f)
+                                    // Found potential camera position, now check for rotation and FOV nearby
+                                    // Rotation is typically 12 bytes after position
+                                    Vector3 testRot = ReadVector3(camMgr + offset + 0xC);
+                                    
+                                    // Check if rotation looks valid (pitch -90 to 90, yaw 0-360)
+                                    if (!float.IsNaN(testRot.X) && !float.IsNaN(testRot.Y) &&
+                                        Math.Abs(testRot.X) < 90 && Math.Abs(testRot.Y) < 360)
                                     {
-                                        byte teamId = ReadByte(playerState + OFFSET_TeamNum);
-                                        if (teamId != 255)
+                                        // Check for FOV nearby (usually within 32 bytes of rotation)
+                                        for (int fovOff = 0; fovOff < 32; fovOff += 4)
                                         {
-                                            cachedLocalTeamId = teamId;
-                                            break;
+                                            float testFov = ReadFloat(camMgr + offset + 0xC + fovOff);
+                                            
+                                            if (testFov > 70 && testFov < 130)
+                                            {
+                                                // Found valid camera data!
+                                                cameraPosition = testPos;
+                                                cameraRotation = testRot;
+                                                cameraFov = testFov;
+                                                foundCameraOffset = offset;
+                                                foundValidCamera = true;
+                                                Console.WriteLine($"[+] Found camera at offset 0x{offset:X}, rot at 0x{(offset + 0xC):X}, fov at 0x{(offset + 0xC + fovOff):X}");
+                                                break;
+                                            }
                                         }
+                                        
+                                        if (foundValidCamera) break;
                                     }
                                 }
-                                catch { continue; }
                             }
                         }
                     }
-                }
-
-                Console.Clear();
-                Console.WriteLine("═══════════════════════════════════════");
-                Console.WriteLine("LOCAL PLAYER");
-                Console.WriteLine($"  Position: X:{localPos.X,9:F1} Y:{localPos.Y,9:F1} Z:{localPos.Z,9:F1}");
-                Console.WriteLine($"  Team: {(cachedLocalTeamId != -1 ? cachedLocalTeamId.ToString() : "Unknown")}");
-                Console.WriteLine("═══════════════════════════════════════\n");
-
-                long gameState2 = ReadInt64(gworld + OFFSET_GameState);
-                if (gameState2 == 0) return;
-
-                long playerArrayAddr2 = gameState2 + OFFSET_PlayerArray;
-                long dataPtr2 = ReadInt64(playerArrayAddr2);
-                int count2 = ReadInt32(playerArrayAddr2 + 0x8);
-
-                if (dataPtr2 == 0 || count2 <= 0 || count2 > 100) return;
-
-                int enemiesFound = 0;
-                int teammatesFound = 0;
-                
-                for (int i = 0; i < count2; i++)
-                {
-                    try
+                    else
                     {
-                        long playerState = ReadInt64(dataPtr2 + i * 8);
-                        if (playerState == 0) continue;
-
-                        long pawn = ReadInt64(playerState + OFFSET_PawnPrivate);
-                        if (pawn == 0 || pawn == localPawn) continue;
-
-                        byte enemyTeamId = ReadByte(playerState + OFFSET_TeamNum);
-                        bool isEnemy = (cachedLocalTeamId != -1 && enemyTeamId != 255 && enemyTeamId != cachedLocalTeamId);
-
-                        long root = ReadInt64(pawn + OFFSET_RootComponent);
-                        if (root == 0) continue;
-
-                        var enemyPos = ReadVector3(root + OFFSET_RelativeLocation);
-
-                        if (enemyPos.X == 0 && enemyPos.Y == 0 && enemyPos.Z == 0) continue;
-
-                        float dist = Distance(localPos, enemyPos);
-
-                        if (isEnemy)
+                        // Use cached offset
+                        cameraPosition = ReadVector3(camMgr + foundCameraOffset);
+                        cameraRotation = ReadVector3(camMgr + foundCameraOffset + 0xC);
+                        cameraFov = ReadFloat(camMgr + foundCameraOffset + 0x18); // Assuming FOV was at +0x18 from rotation
+                        
+                        // Validate it's still working
+                        if (!float.IsNaN(cameraPosition.X) && !float.IsNaN(cameraRotation.X) &&
+                            cameraFov > 60 && cameraFov < 150 && Math.Abs(cameraRotation.X) < 90)
                         {
-                            ConsoleColor color = dist < 2000 ? ConsoleColor.Red :
-                                               dist < 5000 ? ConsoleColor.Green :
-                                               ConsoleColor.Yellow;
-
-                            Console.ForegroundColor = color;
-                            Console.WriteLine($"[ENEMY] Team {enemyTeamId} | Distance: {dist,6:F0} | X:{enemyPos.X,9:F1} Y:{enemyPos.Y,9:F1} Z:{enemyPos.Z,9:F1}");
-                            Console.ResetColor();
-                            enemiesFound++;
+                            foundValidCamera = true;
                         }
                         else
                         {
-                            Console.ForegroundColor = ConsoleColor.Cyan;
-                            Console.WriteLine($"[ALLY]  Team {enemyTeamId} | Distance: {dist,6:F0} | X:{enemyPos.X,9:F1} Y:{enemyPos.Y,9:F1} Z:{enemyPos.Z,9:F1}");
-                            Console.ResetColor();
-                            teammatesFound++;
+                            // Reset and rescan
+                            foundCameraOffset = -1;
+                            Console.WriteLine("[-] Camera offset became invalid, rescanning...");
                         }
                     }
-                    catch { continue; }
+                    
+                    // Fallback if camera data is invalid
+                    if (!foundValidCamera && localPawn != 0)
+                    {
+                        cameraPosition = localPosition;
+                        cameraPosition.Z += 60f;
+                        
+                        // Try reading control rotation from PlayerController as last resort
+                        Vector3 controlRot = ReadVector3(playerController + 0x290);
+                        if (!float.IsNaN(controlRot.X) && Math.Abs(controlRot.X) < 90)
+                        {
+                            cameraRotation = controlRot;
+                            cameraFov = 103f;
+                        }
+                        else
+                        {
+                            cameraRotation = Vector3.Zero;
+                            cameraFov = 103f;
+                        }
+                    }
                 }
 
-                Console.WriteLine($"\n{enemiesFound} enemies | {teammatesFound} allies");
+                if (localPawn != 0)
+                {
+                    long root = ReadInt64(localPawn + OFFSET_RootComponent);
+                    if (root != 0)
+                    {
+                        localPosition = ReadVector3(root + OFFSET_RelativeLocation);
+                    }
+                }
+
+                long gameState = ReadInt64(gworld + OFFSET_GameState);
+                if (gameState == 0) return;
+
+                long playerArray = ReadInt64(gameState + OFFSET_PlayerArray);
+                if (playerArray == 0) return;
+
+                int count = ReadInt32(gameState + OFFSET_PlayerArray + 0x8);
+
+                for (int i = 0; i < Math.Min(count, 64); i++)
+                {
+                    long playerState = ReadInt64(playerArray + (i * 8));
+                    if (playerState == 0) continue;
+
+                    long pawn = ReadInt64(playerState + OFFSET_PawnPrivate);
+                    byte teamId = ReadByte(playerState + OFFSET_TeamNum);
+
+                    if (pawn == localPawn) 
+                    { 
+                        cachedLocalTeamId = teamId; 
+                        continue; 
+                    }
+                    
+                    if (pawn == 0) continue;
+
+                    long root = ReadInt64(pawn + OFFSET_RootComponent);
+                    if (root == 0) continue;
+
+                    Vector3 pos = ReadVector3(root + OFFSET_RelativeLocation);
+                    
+                    // Validate position (check for unreasonable values)
+                    if (float.IsNaN(pos.X) || float.IsNaN(pos.Y) || float.IsNaN(pos.Z)) continue;
+                    if (Math.Abs(pos.X) > 1000000 || Math.Abs(pos.Y) > 1000000 || Math.Abs(pos.Z) > 1000000) continue;
+
+                    float dist = Vector3.Distance(localPosition, pos);
+
+                    players.Add(new PlayerInfo {
+                        Position = pos,
+                        TeamId = teamId,
+                        Distance = dist,
+                        IsEnemy = (cachedLocalTeamId != -1 && teamId != 255 && teamId != cachedLocalTeamId)
+                    });
+                }
             }
-            catch { }
-        }
-
-        private long ReadInt64(long address)
-        {
-            byte[] buffer = new byte[8];
-            ReadProcessMemory(processHandle, (IntPtr)address, buffer, 8, out _);
-            return BitConverter.ToInt64(buffer, 0);
-        }
-
-        private int ReadInt32(long address)
-        {
-            byte[] buffer = new byte[4];
-            ReadProcessMemory(processHandle, (IntPtr)address, buffer, 4, out _);
-            return BitConverter.ToInt32(buffer, 0);
-        }
-
-        private byte ReadByte(long address)
-        {
-            byte[] buffer = new byte[1];
-            ReadProcessMemory(processHandle, (IntPtr)address, buffer, 1, out _);
-            return buffer[0];
-        }
-
-        private float ReadFloat(long address)
-        {
-            byte[] buffer = new byte[4];
-            ReadProcessMemory(processHandle, (IntPtr)address, buffer, 4, out _);
-            return BitConverter.ToSingle(buffer, 0);
-        }
-
-        private Vector3 ReadVector3(long address)
-        {
-            return new Vector3
+            catch (Exception ex)
             {
-                X = ReadFloat(address + 0x0),
-                Y = ReadFloat(address + 0x4),
-                Z = ReadFloat(address + 0x8)
-            };
+                // Silent catch for reading errors
+            }
         }
 
-        private float Distance(Vector3 a, Vector3 b)
+        private bool WorldToScreen(Vector3 worldPos, out Vector2 screenPos)
         {
-            float dx = b.X - a.X;
-            float dy = b.Y - a.Y;
-            float dz = b.Z - a.Z;
-            return MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+            screenPos = Vector2.Zero;
+            
+            try
+            {
+                const float UCONST_Pi = 3.1415926f;
+                const float URotationToRadians = UCONST_Pi / 180.0f;
+                
+                // Get camera axes using UE4 method
+                Vector3 AxisX, AxisY, AxisZ;
+                GetAxes(cameraRotation, out AxisX, out AxisY, out AxisZ);
+                
+                // Calculate delta vector
+                Vector3 Delta = new Vector3(
+                    worldPos.X - cameraPosition.X,
+                    worldPos.Y - cameraPosition.Y,
+                    worldPos.Z - cameraPosition.Z
+                );
+                
+                // Transform to camera space
+                Vector3 Transformed;
+                Transformed.X = Vector3.Dot(Delta, AxisY);
+                Transformed.Y = Vector3.Dot(Delta, AxisZ);
+                Transformed.Z = Vector3.Dot(Delta, AxisX);
+                
+                // Check if behind camera
+                if (Transformed.Z < 1.0f)
+                    Transformed.Z = 1.0f;
+                
+                // Project to screen with correct FOV calculation
+                float centerX = screenWidth / 2.0f;
+                float centerY = screenHeight / 2.0f;
+                
+                screenPos.X = centerX + Transformed.X * (centerX / MathF.Tan(cameraFov * UCONST_Pi / 360.0f)) / Transformed.Z;
+                screenPos.Y = centerY + -Transformed.Y * (centerX / MathF.Tan(cameraFov * UCONST_Pi / 360.0f)) / Transformed.Z;
+                
+                return Transformed.Z >= 1.0f;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+        
+        private Vector3 RotationToVector(Vector3 rotation)
+        {
+            const float URotationToRadians = 3.1415926f / 180.0f;
+            
+            float fYaw = rotation.Y * URotationToRadians;
+            float fPitch = rotation.X * URotationToRadians;
+            float CosPitch = MathF.Cos(fPitch);
+            
+            return new Vector3(
+                MathF.Cos(fYaw) * CosPitch,
+                MathF.Sin(fYaw) * CosPitch,
+                MathF.Sin(fPitch)
+            );
+        }
+        
+        private void GetAxes(Vector3 rotation, out Vector3 X, out Vector3 Y, out Vector3 Z)
+        {
+            X = RotationToVector(rotation);
+            X = Vector3.Normalize(X);
+            
+            Vector3 R = rotation;
+            R.Y += 89.8f;
+            Vector3 R2 = R;
+            R2.X = 0.0f;
+            Y = RotationToVector(R2);
+            Y = Vector3.Normalize(Y);
+            Y.Z = 0.0f;
+            
+            R.Y -= 89.8f;
+            R.X += 89.8f;
+            Z = RotationToVector(R);
+            Z = Vector3.Normalize(Z);
         }
 
-        private struct Vector3
+        private void HandleInput()
         {
-            public float X;
-            public float Y;
-            public float Z;
+            if ((GetAsyncKeyState(0x2D) & 0x8000) != 0) // VK_INSERT
+            {
+                if (!insertKeyPressed) 
+                { 
+                    showMenu = !showMenu; 
+                    insertKeyPressed = true; 
+                }
+            }
+            else insertKeyPressed = false;
+        }
+
+        private bool AttachToProcess()
+        {
+            var procs = Process.GetProcessesByName(PROCESS_NAME);
+            if (procs.Length == 0) return false;
+            processHandle = OpenProcess(0x0010 | 0x0400, false, procs[0].Id);
+            if (processHandle == IntPtr.Zero) return false;
+            baseAddress = procs[0].MainModule.BaseAddress;
+            return true;
+        }
+
+        private long ReadInt64(long addr) 
+        { 
+            if (addr == 0) return 0;
+            byte[] b = new byte[8]; 
+            if (!ReadProcessMemory(processHandle, (IntPtr)addr, b, 8, out _)) return 0;
+            return BitConverter.ToInt64(b, 0); 
+        }
+
+        private int ReadInt32(long addr) 
+        { 
+            if (addr == 0) return 0;
+            byte[] b = new byte[4]; 
+            if (!ReadProcessMemory(processHandle, (IntPtr)addr, b, 4, out _)) return 0;
+            return BitConverter.ToInt32(b, 0); 
+        }
+
+        private float ReadFloat(long addr) 
+        { 
+            if (addr == 0) return 0f;
+            byte[] b = new byte[4]; 
+            if (!ReadProcessMemory(processHandle, (IntPtr)addr, b, 4, out _)) return 0f;
+            return BitConverter.ToSingle(b, 0); 
+        }
+
+        private byte ReadByte(long addr) 
+        { 
+            if (addr == 0) return 0;
+            byte[] b = new byte[1]; 
+            if (!ReadProcessMemory(processHandle, (IntPtr)addr, b, 1, out _)) return 0;
+            return b[0]; 
+        }
+
+        private Vector3 ReadVector3(long addr) 
+        {
+            if (addr == 0) return Vector3.Zero;
+            return new Vector3(ReadFloat(addr), ReadFloat(addr + 4), ReadFloat(addr + 8));
         }
     }
 }
