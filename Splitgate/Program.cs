@@ -96,7 +96,8 @@ namespace SplitExt
             var drawList = ImGui.GetWindowDrawList();
             
             Vector2 center = new Vector2(screenWidth / 2, screenHeight / 2);
-            drawList.AddCircle(center, 3f, 0xFF00FF00, 12, 2f);
+            drawList.AddCircle(center, 3f, 0xFF0000FF, 12, 2f);
+
 
             if (enableTraceLines || enableBoxes)
             {
