@@ -15,6 +15,7 @@ namespace SplitExt
         public bool IsEnemy;
         public byte TeamId;
         public float Distance;
+        public float Health;
     }
 
     class External_Main : Overlay
@@ -33,10 +34,11 @@ namespace SplitExt
         private const int OFFSET_PlayerArray = 0x238;
         private const int OFFSET_PawnPrivate = 0x280;
         private const int OFFSET_TeamNum = 0x338;
+        private const int OFFSET_Health = 0x4ec;
         private const int OFFSET_PlayerCameraManager = 0x2b8;
-        private const int OFFSET_CameraCache = 0x290; // Base offset to try first
+        private const int OFFSET_CameraCache = 0x290;
         
-        private static int foundCameraOffset = -1; // Cache the working offset
+        private static int foundCameraOffset = -1;
 
         [DllImport("kernel32.dll")]
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
@@ -54,6 +56,7 @@ namespace SplitExt
 
         private List<PlayerInfo> players = new List<PlayerInfo>();
         private Vector3 localPosition;
+        private float localHealth = 0f;
         private Vector3 cameraRotation;
         private Vector3 cameraPosition;
         private float cameraFov = 90f;
@@ -78,24 +81,20 @@ namespace SplitExt
 
         protected override void Render()
         {
-            // 1. Update Inputs & Screen
             HandleInput();
             var io = ImGui.GetIO();
             screenWidth = (int)io.DisplaySize.X;
             screenHeight = (int)io.DisplaySize.Y;
 
-            // 2. Update game data
             UpdateGameData();
             PrintConsoleDebug();
 
-            // 3. ImGui Overlay Drawing
             ImGui.SetNextWindowPos(new Vector2(0, 0));
             ImGui.SetNextWindowSize(new Vector2(screenWidth, screenHeight));
             ImGui.Begin("##Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoInputs);
             
             var drawList = ImGui.GetWindowDrawList();
             
-            // Draw crosshair for reference
             Vector2 center = new Vector2(screenWidth / 2, screenHeight / 2);
             drawList.AddCircle(center, 3f, 0xFF00FF00, 12, 2f);
 
@@ -103,22 +102,21 @@ namespace SplitExt
             {
                 foreach (var player in players)
                 {
+                    if (player.Health <= 0) continue;
+                    
                     if (player.IsEnemy && WorldToScreen(player.Position, out Vector2 screenPos))
                     {
-                        // Check if position is on screen
                         if (screenPos.X >= 0 && screenPos.X <= screenWidth && 
                             screenPos.Y >= 0 && screenPos.Y <= screenHeight)
                         {
                             if (enableTraceLines)
                             {
-                                // Draw red trace line from bottom center to enemy feet
                                 Vector2 bottomCenter = new Vector2(screenWidth / 2, screenHeight);
                                 drawList.AddLine(bottomCenter, screenPos, 0xFF0000FF, 2.0f);
                             }
 
                             if (enableBoxes)
                             {
-                                // Calculate head position (approximate +70 units up in world space)
                                 Vector3 headPos = player.Position;
                                 headPos.Z += 70f;
                                 
@@ -130,10 +128,8 @@ namespace SplitExt
                                     Vector2 topLeft = new Vector2(screenPos.X - width / 2, headScreen.Y);
                                     Vector2 bottomRight = new Vector2(screenPos.X + width / 2, screenPos.Y);
 
-                                    // Draw box
                                     drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
                                     
-                                    // Draw distance text
                                     string distText = $"{player.Distance:F0}m";
                                     Vector2 textPos = new Vector2(screenPos.X - 15, topLeft.Y - 15);
                                     drawList.AddText(textPos, 0xFFFFFFFF, distText);
@@ -150,6 +146,7 @@ namespace SplitExt
                 ImGui.Begin("SplitExt", ref showMenu, ImGuiWindowFlags.AlwaysAutoResize);
                 ImGui.Text($"Camera FOV: {cameraFov:F1}");
                 ImGui.Text($"Local Team: {cachedLocalTeamId}");
+                ImGui.Text($"Local Health: {localHealth:F1}");
                 ImGui.Separator();
                 ImGui.Checkbox("Enemy Trace Lines", ref enableTraceLines);
                 ImGui.Checkbox("Enemy Boxes", ref enableBoxes);
@@ -161,7 +158,6 @@ namespace SplitExt
 
         private void PrintConsoleDebug()
         {
-            // Only update console occasionally to prevent flickering
             if (DateTime.Now.Millisecond % 500 > 10) return; 
 
             Console.SetCursorPosition(0, 0);
@@ -190,7 +186,7 @@ namespace SplitExt
             }
             Console.ResetColor();
             Console.WriteLine($"\nTracking {enemies} enemies, {teammates} teammates        ");
-            Console.WriteLine("                                        "); // Clear line
+            Console.WriteLine("                                        ");
         }
 
         private void UpdateGameData()
@@ -212,45 +208,34 @@ namespace SplitExt
 
                 long localPawn = ReadInt64(playerController + OFFSET_AcknowledgedPawn);
 
-                // Read camera data from PlayerCameraManager
                 long camMgr = ReadInt64(playerController + OFFSET_PlayerCameraManager);
                 if (camMgr != 0)
                 {
                     bool foundValidCamera = false;
                     
-                    // If we haven't found valid camera yet, scan systematically
                     if (foundCameraOffset == -1)
                     {
-                        // Scan through PlayerCameraManager structure in 4-byte increments
-                        // Looking for position data that matches player position closely
                         for (int offset = 0; offset < 0x2000; offset += 0x4)
                         {
                             Vector3 testPos = ReadVector3(camMgr + offset);
                             
-                            // Check if this looks like a valid position near the player
                             if (!float.IsNaN(testPos.X) && !float.IsNaN(testPos.Y) && !float.IsNaN(testPos.Z))
                             {
                                 float distToPlayer = Vector3.Distance(testPos, localPosition);
                                 
-                                // Camera should be within 200 units of player (accounting for eye height)
                                 if (distToPlayer < 200 && distToPlayer > 0.1f)
                                 {
-                                    // Found potential camera position, now check for rotation and FOV nearby
-                                    // Rotation is typically 12 bytes after position
                                     Vector3 testRot = ReadVector3(camMgr + offset + 0xC);
                                     
-                                    // Check if rotation looks valid (pitch -90 to 90, yaw 0-360)
                                     if (!float.IsNaN(testRot.X) && !float.IsNaN(testRot.Y) &&
                                         Math.Abs(testRot.X) < 90 && Math.Abs(testRot.Y) < 360)
                                     {
-                                        // Check for FOV nearby (usually within 32 bytes of rotation)
                                         for (int fovOff = 0; fovOff < 32; fovOff += 4)
                                         {
                                             float testFov = ReadFloat(camMgr + offset + 0xC + fovOff);
                                             
                                             if (testFov > 70 && testFov < 130)
                                             {
-                                                // Found valid camera data!
                                                 cameraPosition = testPos;
                                                 cameraRotation = testRot;
                                                 cameraFov = testFov;
@@ -269,12 +254,10 @@ namespace SplitExt
                     }
                     else
                     {
-                        // Use cached offset
                         cameraPosition = ReadVector3(camMgr + foundCameraOffset);
                         cameraRotation = ReadVector3(camMgr + foundCameraOffset + 0xC);
-                        cameraFov = ReadFloat(camMgr + foundCameraOffset + 0x18); // Assuming FOV was at +0x18 from rotation
+                        cameraFov = ReadFloat(camMgr + foundCameraOffset + 0x18);
                         
-                        // Validate it's still working
                         if (!float.IsNaN(cameraPosition.X) && !float.IsNaN(cameraRotation.X) &&
                             cameraFov > 60 && cameraFov < 150 && Math.Abs(cameraRotation.X) < 90)
                         {
@@ -282,19 +265,16 @@ namespace SplitExt
                         }
                         else
                         {
-                            // Reset and rescan
                             foundCameraOffset = -1;
                             Console.WriteLine("[-] Camera offset became invalid, rescanning...");
                         }
                     }
                     
-                    // Fallback if camera data is invalid
                     if (!foundValidCamera && localPawn != 0)
                     {
                         cameraPosition = localPosition;
                         cameraPosition.Z += 60f;
                         
-                        // Try reading control rotation from PlayerController as last resort
                         Vector3 controlRot = ReadVector3(playerController + 0x290);
                         if (!float.IsNaN(controlRot.X) && Math.Abs(controlRot.X) < 90)
                         {
@@ -316,6 +296,9 @@ namespace SplitExt
                     {
                         localPosition = ReadVector3(root + OFFSET_RelativeLocation);
                     }
+                    
+                    // local health idk
+                    localHealth = ReadFloat(localPawn + OFFSET_Health);
                 }
 
                 long gameState = ReadInt64(gworld + OFFSET_GameState);
@@ -345,9 +328,15 @@ namespace SplitExt
                     long root = ReadInt64(pawn + OFFSET_RootComponent);
                     if (root == 0) continue;
 
+                    // read the fucking health of the pawn
+                    float health = ReadFloat(pawn + OFFSET_Health);
+                    
+                    // skip 
+                    if (health <= 0) continue;
+
                     Vector3 pos = ReadVector3(root + OFFSET_RelativeLocation);
                     
-                    // Validate position (check for unreasonable values)
+                    // claude told me to add these checks
                     if (float.IsNaN(pos.X) || float.IsNaN(pos.Y) || float.IsNaN(pos.Z)) continue;
                     if (Math.Abs(pos.X) > 1000000 || Math.Abs(pos.Y) > 1000000 || Math.Abs(pos.Z) > 1000000) continue;
 
@@ -357,16 +346,18 @@ namespace SplitExt
                         Position = pos,
                         TeamId = teamId,
                         Distance = dist,
+                        Health = health,
                         IsEnemy = (cachedLocalTeamId != -1 && teamId != 255 && teamId != cachedLocalTeamId)
                     });
                 }
             }
             catch (Exception ex)
             {
-                // Silent catch for reading errors
+                // claude said do it idk what this is actually...
             }
         }
 
+        // world to fucking screen (I hate it)
         private bool WorldToScreen(Vector3 worldPos, out Vector2 screenPos)
         {
             screenPos = Vector2.Zero;
@@ -376,28 +367,23 @@ namespace SplitExt
                 const float UCONST_Pi = 3.1415926f;
                 const float URotationToRadians = UCONST_Pi / 180.0f;
                 
-                // Get camera axes using UE4 method
                 Vector3 AxisX, AxisY, AxisZ;
                 GetAxes(cameraRotation, out AxisX, out AxisY, out AxisZ);
                 
-                // Calculate delta vector
                 Vector3 Delta = new Vector3(
                     worldPos.X - cameraPosition.X,
                     worldPos.Y - cameraPosition.Y,
                     worldPos.Z - cameraPosition.Z
                 );
                 
-                // Transform to camera space
                 Vector3 Transformed;
                 Transformed.X = Vector3.Dot(Delta, AxisY);
                 Transformed.Y = Vector3.Dot(Delta, AxisZ);
                 Transformed.Z = Vector3.Dot(Delta, AxisX);
                 
-                // Check if behind camera
                 if (Transformed.Z < 1.0f)
                     Transformed.Z = 1.0f;
                 
-                // Project to screen with correct FOV calculation
                 float centerX = screenWidth / 2.0f;
                 float centerY = screenHeight / 2.0f;
                 
@@ -448,7 +434,7 @@ namespace SplitExt
 
         private void HandleInput()
         {
-            if ((GetAsyncKeyState(0x2D) & 0x8000) != 0) // VK_INSERT
+            if ((GetAsyncKeyState(0x2D) & 0x8000) != 0) // Insert key bru
             {
                 if (!insertKeyPressed) 
                 { 
@@ -468,6 +454,9 @@ namespace SplitExt
             baseAddress = procs[0].MainModule.BaseAddress;
             return true;
         }
+
+
+        // some memory functions (copied from google bc im lazy)
 
         private long ReadInt64(long addr) 
         { 
