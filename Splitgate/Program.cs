@@ -12,8 +12,21 @@ namespace SplitExt
         private static int foundCameraOffset = -1;
 
         private int cachedLocalTeamId = -1;
-        private int screenWidth = 1920;
-        private int screenHeight = 1080;
+
+        private const int SM_CXSCREEN = 0;
+        private const int SM_CYSCREEN = 1;
+
+        public static int GetScreenWidth()
+        {
+            return Win32.GetSystemMetrics(SM_CXSCREEN);
+        }
+
+        public static int GetScreenHeight()
+        {
+            return Win32.GetSystemMetrics(SM_CYSCREEN);
+        }
+        private int screenWidth = GetScreenWidth();
+        private int screenHeight = GetScreenHeight();
 
         private List<UPlayerInfo> players = new List<UPlayerInfo>();
         private Vector3 localPosition;
@@ -24,14 +37,11 @@ namespace SplitExt
 
         private bool showMenu = true;
         private bool insertKeyPressed = false;
-        private bool enableTraceLines = false;
-        private bool enableBoxes = false;
-        private bool enableAimbot = false;
         private bool rightMousePressed = false;
         private float rainbowHue = 0f;
 
-        private float aimbotFOV = 150f;
-        private float aimbotSmoothing = 5f;
+        private ESP esp;
+        private Aim aim;
 
         public Program() : base()
         {
@@ -39,6 +49,9 @@ namespace SplitExt
             {
                 Environment.Exit(1);
             }
+
+            esp = new ESP(screenWidth, screenHeight);
+            aim = new Aim(screenWidth, screenHeight);
 
             Console.WriteLine($"[OFFSET] GWorld: 0x{Offsets.GWorld:X}");
             Console.WriteLine($"[OFFSET] OwningGameInstance: 0x{Offsets.OwningGameInstance:X}");
@@ -79,7 +92,13 @@ namespace SplitExt
             screenWidth = (int)io.DisplaySize.X;
             screenHeight = (int)io.DisplaySize.Y;
 
+            esp.UpdateScreenSize(screenWidth, screenHeight);
+            aim.UpdateScreenSize(screenWidth, screenHeight);
+
             UpdateGameData();
+
+            esp.UpdateCamera(cameraPosition, cameraRotation, cameraFov);
+            aim.UpdateCamera(cameraPosition, cameraRotation, cameraFov);
 
             ImGui.SetNextWindowPos(new Vector2(0, 0));
             ImGui.SetNextWindowSize(new Vector2(screenWidth, screenHeight));
@@ -96,64 +115,8 @@ namespace SplitExt
             float textY = 5f;
             RenderRainbowTextAtPosition(watermarkText, new Vector2(textX, textY), rainbowHue);
 
-            if (enableTraceLines || enableBoxes)
-            {
-                foreach (var player in players)
-                {
-                    if (player.Health <= 0) continue;
+            esp.RenderESP(players);
 
-                    if (player.IsEnemy && WorldToScreen(player.Position, out Vector2 screenPos))
-                    {
-                        if (enableTraceLines)
-                        {
-                            Vector2 bottomCenter = new Vector2(screenWidth / 2, screenHeight);
-                            drawList.AddLine(bottomCenter, screenPos, 0xFF0000FF, 2.0f);
-                        }
-
-                        if (enableBoxes && screenPos.X >= 0 && screenPos.X <= screenWidth &&
-                            screenPos.Y >= 0 && screenPos.Y <= screenHeight)
-                        {
-                            Vector3 headPos = player.Position;
-                            headPos.Z += 95f;
-
-                            Vector3 feetPos = player.Position;
-                            feetPos.Z -= 10f;
-
-                            if (WorldToScreen(headPos, out Vector2 headScreen) && WorldToScreen(feetPos, out Vector2 feetScreen))
-                            {
-                                float height = Math.Abs(headScreen.Y - feetScreen.Y);
-
-                                float minHeight = 50f;
-                                if (height < minHeight)
-                                {
-                                    height = minHeight;
-                                }
-
-                                float width = height * 0.4f;
-
-                                float boxTop = headScreen.Y;
-                                float boxBottom = feetScreen.Y;
-
-                                if (Math.Abs(headScreen.Y - feetScreen.Y) < minHeight)
-                                {
-                                    float boxCenter = (headScreen.Y + feetScreen.Y) / 2;
-                                    boxTop = boxCenter - height / 2;
-                                    boxBottom = boxCenter + height / 2;
-                                }
-
-                                Vector2 topLeft = new Vector2(feetScreen.X - width / 2, boxTop);
-                                Vector2 bottomRight = new Vector2(feetScreen.X + width / 2, boxBottom);
-
-                                drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
-
-                                string distText = $"{player.Distance:F0}m";
-                                Vector2 textPos = new Vector2(feetScreen.X - 15, topLeft.Y - 15);
-                                drawList.AddText(textPos, 0xFFFFFFFF, distText);
-                            }
-                        }
-                    }
-                }
-            }
             ImGui.End();
 
             if (showMenu)
@@ -190,74 +153,97 @@ namespace SplitExt
                 ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, new Vector4(0.55f, 0.78f, 1.0f, 1.0f));
                 ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.22f, 0.28f, 0.38f, 1.0f));
                 ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.28f, 0.35f, 0.48f, 1.0f));
-                ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.32f, 0.40f, 0.55f, 1.0f));
-                ImGui.PushStyleColor(ImGuiCol.Separator, new Vector4(0.35f, 0.35f, 0.45f, 1.0f));
+                ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.35f, 0.42f, 0.58f, 1.0f));
 
-                ImGui.SetNextWindowSize(new Vector2(480, 0), ImGuiCond.FirstUseEver);
-                ImGui.Begin("SplitExt", ref showMenu, ImGuiWindowFlags.NoCollapse);
+                ImGui.SetNextWindowPos(new Vector2(50, 50), ImGuiCond.FirstUseEver);
+                ImGui.SetNextWindowSize(new Vector2(600, 0), ImGuiCond.FirstUseEver);
 
-                if (ImGui.BeginTabBar("MainTabs", ImGuiTabBarFlags.None))
+                if (ImGui.Begin("SplitExt", ref showMenu, ImGuiWindowFlags.AlwaysAutoResize))
                 {
-                    if (ImGui.BeginTabItem("Debug"))
+                    if (ImGui.BeginTabBar("MainTabs"))
                     {
-                        ImGui.BulletText($"Local Team: {cachedLocalTeamId}");
-                        ImGui.BulletText($"Local Health: {localHealth:F1}");
-                        ImGui.BulletText($"Camera FOV: {cameraFov:F1}");
-                        ImGui.BulletText($"Enemies Found: {players.Count}");
-
-                        ImGui.Spacing();
-                        ImGui.Separator();
-                        ImGui.Spacing();
-                        ImGui.Text("GitHub: ");
-                        ImGui.SameLine();
-                        RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
-                        ImGui.Spacing();
-                        ImGui.EndTabItem();
-                    }
-
-                    if (ImGui.BeginTabItem("ESP"))
-                    {
-                        ImGui.Checkbox("Enable ESP Boxes", ref enableBoxes);
-                        ImGui.Checkbox("Enable ESP Trace Lines", ref enableTraceLines);
-
-                        ImGui.Spacing();
-                        ImGui.Separator();
-                        ImGui.Spacing();
-                        ImGui.Text("GitHub: ");
-                        ImGui.SameLine();
-                        RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
-                        ImGui.Spacing();
-                        ImGui.EndTabItem();
-                    }
-
-                    if (ImGui.BeginTabItem("Aimbot"))
-                    {
-                        ImGui.Checkbox("Enable Aimbot", ref enableAimbot);
-
-                        if (enableAimbot)
+                        if (ImGui.BeginTabItem("ESP"))
                         {
+
+                            bool enableTraceLines = esp.EnableTraceLines;
+                            if (ImGui.Checkbox("enable Enemy Trace Lines", ref enableTraceLines))
+                            {
+                                esp.EnableTraceLines = enableTraceLines;
+                            }
+
+                            bool enableBoxes = esp.EnableBoxes;
+                            if (ImGui.Checkbox("enable Enemy Boxes", ref enableBoxes))
+                            {
+                                esp.EnableBoxes = enableBoxes;
+                            }
+
                             ImGui.Spacing();
-                            ImGui.SliderFloat("FOV", ref aimbotFOV, 10f, 300f, "%.0f");
-                            ImGui.SliderFloat("Smoothing", ref aimbotSmoothing, 1f, 20f, "%.1f");
-                            ImGui.TextDisabled("(1 = instant, higher = smoother)");
+                            ImGui.Separator();
+                            ImGui.Spacing();
+
+                            RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
+
+                            ImGui.EndTabItem();
                         }
 
-                        ImGui.Spacing();
-                        ImGui.Separator();
-                        ImGui.Spacing();
-                        ImGui.Text("GitHub: ");
-                        ImGui.SameLine();
-                        RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
-                        ImGui.Spacing();
-                        ImGui.EndTabItem();
+                        if (ImGui.BeginTabItem("Aimbot"))
+                        {
+
+                            bool enableAimbot = aim.EnableAimbot;
+                            if (ImGui.Checkbox("Enable Aimbot", ref enableAimbot))
+                            {
+                                aim.EnableAimbot = enableAimbot;
+                            }
+
+                            if (aim.EnableAimbot)
+                            {
+                                ImGui.Spacing();
+
+                                float aimbotFOV = aim.AimbotFOV;
+                                if (ImGui.SliderFloat("Aimbot FOV", ref aimbotFOV, 50f, 300f))
+                                {
+                                    aim.AimbotFOV = aimbotFOV;
+                                }
+
+                                float aimbotSmoothing = aim.AimbotSmoothing;
+                                if (ImGui.SliderFloat("Aimbot Smoothing", ref aimbotSmoothing, 1f, 20f))
+                                {
+                                    aim.AimbotSmoothing = aimbotSmoothing;
+                                }
+                            }
+
+                            ImGui.Spacing();
+                            ImGui.Separator();
+                            ImGui.Spacing();
+
+                            RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
+
+                            ImGui.EndTabItem();
+                        }
+
+                        if (ImGui.BeginTabItem("Debug"))
+                        {
+
+                            ImGui.Text($"Camera FOV: {cameraFov:F1}");
+                            ImGui.Text($"Local Team: {cachedLocalTeamId}");
+                            ImGui.Text($"Local Health: {localHealth:F1}");
+
+                            ImGui.Spacing();
+                            ImGui.Separator();
+                            ImGui.Spacing();
+
+                            RenderRainbowText("github.com/5XGhost143/SplitExt", rainbowHue);
+
+                            ImGui.EndTabItem();
+                        }
+
+                        ImGui.EndTabBar();
                     }
-
-                    ImGui.EndTabBar();
                 }
-
                 ImGui.End();
 
-                ImGui.PopStyleColor(19);
+                ImGui.PopStyleColor(17);
+
                 style.WindowRounding = originalRounding;
                 style.FrameRounding = originalFrameRounding;
                 style.TabRounding = originalTabRounding;
@@ -442,86 +428,13 @@ namespace SplitExt
             }
         }
 
-        private bool WorldToScreen(Vector3 worldPos, out Vector2 screenPos)
-        {
-            screenPos = Vector2.Zero;
-
-            try
-            {
-                const float UCONST_Pi = 3.1415926f;
-
-                Vector3 AxisX, AxisY, AxisZ;
-                GetAxes(cameraRotation, out AxisX, out AxisY, out AxisZ);
-
-                Vector3 Delta = new Vector3(
-                    worldPos.X - cameraPosition.X,
-                    worldPos.Y - cameraPosition.Y,
-                    worldPos.Z - cameraPosition.Z
-                );
-
-                Vector3 Transformed;
-                Transformed.X = Vector3.Dot(Delta, AxisY);
-                Transformed.Y = Vector3.Dot(Delta, AxisZ);
-                Transformed.Z = Vector3.Dot(Delta, AxisX);
-
-                if (Transformed.Z < 1.0f)
-                    Transformed.Z = 1.0f;
-
-                float centerX = screenWidth / 2.0f;
-                float centerY = screenHeight / 2.0f;
-
-                screenPos.X = centerX + Transformed.X * (centerX / MathF.Tan(cameraFov * UCONST_Pi / 360.0f)) / Transformed.Z;
-                screenPos.Y = centerY + -Transformed.Y * (centerX / MathF.Tan(cameraFov * UCONST_Pi / 360.0f)) / Transformed.Z;
-
-                return Transformed.Z >= 1.0f;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private Vector3 RotationToVector(Vector3 rotation)
-        {
-            const float URotationToRadians = 3.1415926f / 180.0f;
-
-            float fYaw = rotation.Y * URotationToRadians;
-            float fPitch = rotation.X * URotationToRadians;
-            float CosPitch = MathF.Cos(fPitch);
-
-            return new Vector3(
-                MathF.Cos(fYaw) * CosPitch,
-                MathF.Sin(fYaw) * CosPitch,
-                MathF.Sin(fPitch)
-            );
-        }
-
-        private void GetAxes(Vector3 rotation, out Vector3 X, out Vector3 Y, out Vector3 Z)
-        {
-            X = RotationToVector(rotation);
-            X = Vector3.Normalize(X);
-
-            Vector3 R = rotation;
-            R.Y += 89.8f;
-            Vector3 R2 = R;
-            R2.X = 0.0f;
-            Y = RotationToVector(R2);
-            Y = Vector3.Normalize(Y);
-            Y.Z = 0.0f;
-
-            R.Y -= 89.8f;
-            R.X += 89.8f;
-            Z = RotationToVector(R);
-            Z = Vector3.Normalize(Z);
-        }
-
         private void HandleInput()
         {
             bool rightMouseCurrentlyPressed = (Win32.GetAsyncKeyState(0x02) & 0x8000) != 0;
 
-            if (rightMouseCurrentlyPressed && enableAimbot)
+            if (rightMouseCurrentlyPressed && aim.EnableAimbot)
             {
-                AimAtNearestEnemy();
+                aim.AimAtNearestEnemy(players);
             }
 
             rightMousePressed = rightMouseCurrentlyPressed;
@@ -535,53 +448,6 @@ namespace SplitExt
                 }
             }
             else insertKeyPressed = false;
-        }
-
-        private void AimAtNearestEnemy()
-        {
-            if (players.Count == 0) return;
-
-            Vector2 screenCenter = new Vector2(screenWidth / 2, screenHeight / 2);
-            UPlayerInfo? closestPlayer = null;
-            float closestDistance = float.MaxValue;
-            Vector2 closestScreenPos = Vector2.Zero;
-
-            foreach (var player in players)
-            {
-                if (!player.IsEnemy || player.Health <= 0) continue;
-
-                Vector3 headPos = player.Position;
-                headPos.Z += 80f;
-
-                if (WorldToScreen(headPos, out Vector2 screenPos))
-                {
-                    if (screenPos.X < 0 || screenPos.X > screenWidth ||
-                        screenPos.Y < 0 || screenPos.Y > screenHeight)
-                        continue;
-
-                    float distanceToCenter = Vector2.Distance(screenCenter, screenPos);
-
-                    if (distanceToCenter < aimbotFOV && distanceToCenter < closestDistance)
-                    {
-                        closestDistance = distanceToCenter;
-                        closestPlayer = player;
-                        closestScreenPos = screenPos;
-                    }
-                }
-            }
-
-            if (closestPlayer.HasValue)
-            {
-                Vector2 delta = closestScreenPos - screenCenter;
-
-                int moveX = (int)(delta.X / aimbotSmoothing);
-                int moveY = (int)(delta.Y / aimbotSmoothing);
-
-                if (Math.Abs(moveX) > 0 || Math.Abs(moveY) > 0)
-                {
-                    Win32.mouse_event(Win32.MOUSEEVENTF_MOVE, moveX, moveY, 0, 0);
-                }
-            }
         }
 
         private void RenderRainbowText(string text, float startHue)
