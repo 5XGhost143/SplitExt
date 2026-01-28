@@ -11,7 +11,7 @@ SplitExt is an external cheat for **Splitgate (Splitgate 1 / Legacy)**.
 
 **This project is for educational purposes only.**
 
-## Cheat is'nt working?
+## Cheat is not working?
 
 **It's most likely that an Game Update changed the Offsets but I made it very easy to get it working again just Clone the Project and enter the new Offsets these Offsets can be dumped or can be found [here](https://dumpspace.spuckwaffel.com)**
 
