@@ -48,6 +48,11 @@ namespace SplitExt
         [DllImport("user32.dll")]
         private static extern short GetAsyncKeyState(int vKey);
 
+        [DllImport("user32.dll")]
+        private static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
+
+        private const int MOUSEEVENTF_MOVE = 0x0001;
+
         private IntPtr processHandle;
         private IntPtr baseAddress;
         private int cachedLocalTeamId = -1;
@@ -67,6 +72,9 @@ namespace SplitExt
         private bool enableBoxes = false;
         private bool rightMousePressed = false;
         private float rainbowHue = 0f;
+        
+        // Aimbot settings
+        private float aimbotFOV = 150f; // Field of view in pixels für den aimbot
 
         public External_Main() : base()
         {
@@ -218,6 +226,10 @@ namespace SplitExt
                 ImGui.Separator();
                 ImGui.Checkbox("Enemy Trace Lines", ref enableTraceLines);
                 ImGui.Checkbox("Enemy Boxes", ref enableBoxes);
+                ImGui.Separator();
+                ImGui.Text("Aimbot Settings:");
+                ImGui.SliderFloat("FOV (Pixels)", ref aimbotFOV, 50f, 300f);
+                ImGui.Text("Hold Right Mouse to Aim");
                 ImGui.Separator();
                 ImGui.Text("GitHub: github.com/5XGhost143/SplitExt");
                 ImGui.End();
@@ -505,15 +517,16 @@ namespace SplitExt
 
         private void HandleInput()
         {
-            // Right mouse button bruuhj
-            if ((GetAsyncKeyState(0x02) & 0x8000) != 0)
+            // Right mouse button - kontinuierlich während gedrückt halten
+            bool rightMouseCurrentlyPressed = (GetAsyncKeyState(0x02) & 0x8000) != 0;
+            
+            if (rightMouseCurrentlyPressed)
             {
-                rightMousePressed = true;
+                // Solange die rechte Maustaste gedrückt ist, kontinuierlich aimen
+                AimAtNearestEnemy();
             }
-            else
-            {
-                rightMousePressed = false;
-            }
+            
+            rightMousePressed = rightMouseCurrentlyPressed;
             
             if ((GetAsyncKeyState(0x2D) & 0x8000) != 0) // Insert key bru
             {
@@ -524,6 +537,60 @@ namespace SplitExt
                 }
             }
             else insertKeyPressed = false;
+        }
+        
+        private void AimAtNearestEnemy()
+        {
+            if (players.Count == 0) return;
+            
+            Vector2 screenCenter = new Vector2(screenWidth / 2, screenHeight / 2);
+            PlayerInfo? closestPlayer = null;
+            float closestDistance = float.MaxValue;
+            Vector2 closestScreenPos = Vector2.Zero;
+            
+            // Finde den nächsten Feind im FOV
+            foreach (var player in players)
+            {
+                if (!player.IsEnemy || player.Health <= 0) continue;
+                
+                // Berechne Kopfposition
+                Vector3 headPos = player.Position;
+                headPos.Z += 80f; // Offset für den Kopf
+                
+                if (WorldToScreen(headPos, out Vector2 screenPos))
+                {
+                    // Prüfe ob im Bildschirm
+                    if (screenPos.X < 0 || screenPos.X > screenWidth || 
+                        screenPos.Y < 0 || screenPos.Y > screenHeight)
+                        continue;
+                    
+                    float distanceToCenter = Vector2.Distance(screenCenter, screenPos);
+                    
+                    // Prüfe ob im FOV und näher als der bisherige näheste
+                    if (distanceToCenter < aimbotFOV && distanceToCenter < closestDistance)
+                    {
+                        closestDistance = distanceToCenter;
+                        closestPlayer = player;
+                        closestScreenPos = screenPos;
+                    }
+                }
+            }
+            
+            // Wenn ein Ziel gefunden wurde, bewege die Maus dorthin (ohne Smoothing)
+            if (closestPlayer.HasValue)
+            {
+                Vector2 delta = closestScreenPos - screenCenter;
+                
+                // Direktes Aiming ohne Smoothing
+                int moveX = (int)delta.X;
+                int moveY = (int)delta.Y;
+                
+                // Mausbewegung mit Win32 API
+                if (Math.Abs(moveX) > 0 || Math.Abs(moveY) > 0)
+                {
+                    mouse_event(MOUSEEVENTF_MOVE, moveX, moveY, 0, 0);
+                }
+            }
         }
 
         private bool AttachToProcess()
