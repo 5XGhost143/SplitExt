@@ -1,3 +1,8 @@
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.exe
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.deps.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.runtimeconfig.json
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.dll
+E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.pdb
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\ClickableTransparentOverlay.dll
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\ImGui.NET.dll
 E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\SharpGen.Runtime.dll
@@ -20,13 +25,8 @@ E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.AssemblyInfo.cs
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.csproj.CoreCompileInputs.cache
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.sourcelink.json
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.csproj.Up2Date
-E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.genruntimeconfig.cache
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.exe
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.deps.json
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.runtimeconfig.json
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.dll
-E:\.Projects\Splitgate\Splitgate\bin\Debug\net10.0\firefox.pdb
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\firefox.dll
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\refint\firefox.dll
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\firefox.pdb
+E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\Splitgate.genruntimeconfig.cache
 E:\.Projects\Splitgate\Splitgate\obj\Debug\net10.0\ref\firefox.dll
