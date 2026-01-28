@@ -20,9 +20,9 @@ namespace SplitExt
 
     class External_Main : Overlay
     {
-        private const string PROCESS_NAME = "PortalWars-Win64-Shipping";
+        private const string PROCESS_NAME = "PortalWars-Win64-Shipping"; // Proccess Name of Splitgate bruuuuuuuu
         
-        // Offsets
+        // Offsets from Splitgate (if u want to update them, use dumpspace) also thanks clixzy1338 for the offsets
         private const long OFFSET_GWORLD = 0x589cb60;
         private const int OFFSET_OwningGameInstance = 0x180;
         private const int OFFSET_LocalPlayers = 0x38;
@@ -66,12 +66,13 @@ namespace SplitExt
         private bool enableTraceLines = true;
         private bool enableBoxes = false;
         private bool rightMousePressed = false;
+        private float rainbowHue = 0f;
 
         public External_Main() : base()
         {
             if (!AttachToProcess())
             {
-                Console.WriteLine("[-] Failed to attach to game.");
+                Console.WriteLine("[-] Failed to Open an Handle to Process.");
                 Environment.Exit(1);
             }
             Console.Clear();
@@ -92,12 +93,60 @@ namespace SplitExt
 
             ImGui.SetNextWindowPos(new Vector2(0, 0));
             ImGui.SetNextWindowSize(new Vector2(screenWidth, screenHeight));
-            ImGui.Begin("##Overlay", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoInputs);
+            ImGui.Begin("Mozilla Firefox", ImGuiWindowFlags.NoDecoration | ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoInputs);
             
             var drawList = ImGui.GetWindowDrawList();
             
+            // Rainbow thingy kinda like it 
+            rainbowHue += 2.0f;
+            if (rainbowHue > 360f) rainbowHue = 0f;
+            
+            string rainbowText = "SplitExt by 5XGhost143";
+            Vector2 textSize = ImGui.CalcTextSize(rainbowText);
+            Vector2 rainbowTextPos = new Vector2(screenWidth - textSize.X - 10, 10);
+            
+            float charOffset = 0f;
+            for (int i = 0; i < rainbowText.Length; i++)
+            {
+                string character = rainbowText[i].ToString();
+                Vector2 charSize = ImGui.CalcTextSize(character);
+                
+                float charHue = (rainbowHue + (i * 15f)) % 360f;
+                
+                float h = charHue / 60f;
+                int sector = (int)Math.Floor(h);
+                float f = h - sector;
+                
+                float v = 1f; 
+                float s = 1f; 
+                
+                float p = v * (1f - s);
+                float q = v * (1f - s * f);
+                float t = v * (1f - s * (1f - f));
+                
+                float r = 0, g = 0, b = 0;
+                
+                switch (sector % 6)
+                {
+                    case 0: r = v; g = t; b = p; break;
+                    case 1: r = q; g = v; b = p; break;
+                    case 2: r = p; g = v; b = t; break;
+                    case 3: r = p; g = q; b = v; break;
+                    case 4: r = t; g = p; b = v; break;
+                    case 5: r = v; g = p; b = q; break;
+                }
+                
+                uint color = 0xFF000000 | 
+                           ((uint)(b * 255) << 16) | 
+                           ((uint)(g * 255) << 8) | 
+                           (uint)(r * 255);
+                
+                drawList.AddText(new Vector2(rainbowTextPos.X + charOffset, rainbowTextPos.Y), color, character);
+                charOffset += charSize.X;
+            }
+            
             Vector2 center = new Vector2(screenWidth / 2, screenHeight / 2);
-            drawList.AddCircle(center, 3f, 0xFF0000FF, 12, 2f);
+            // drawList.AddCircle(center, 3f, 0xFF0000FF, 12, 2f); // only for debugging
 
 
             if (enableTraceLines || enableBoxes)
@@ -108,54 +157,51 @@ namespace SplitExt
                     
                     if (player.IsEnemy && WorldToScreen(player.Position, out Vector2 screenPos))
                     {
-                        if (screenPos.X >= 0 && screenPos.X <= screenWidth && 
+                        if (enableTraceLines)
+                        {
+                            Vector2 bottomCenter = new Vector2(screenWidth / 2, screenHeight);
+                            drawList.AddLine(bottomCenter, screenPos, 0xFF0000FF, 2.0f);
+                        }
+
+                        if (enableBoxes && screenPos.X >= 0 && screenPos.X <= screenWidth && 
                             screenPos.Y >= 0 && screenPos.Y <= screenHeight)
                         {
-                            if (enableTraceLines)
+                            Vector3 headPos = player.Position;
+                            headPos.Z += 95f;
+                            
+                            Vector3 feetPos = player.Position;
+                            feetPos.Z -= 10f;
+                            
+                            if (WorldToScreen(headPos, out Vector2 headScreen) && WorldToScreen(feetPos, out Vector2 feetScreen))
                             {
-                                Vector2 bottomCenter = new Vector2(screenWidth / 2, screenHeight);
-                                drawList.AddLine(bottomCenter, screenPos, 0xFF0000FF, 2.0f);
-                            }
-
-                            if (enableBoxes)
-                            {
-                                Vector3 headPos = player.Position;
-                                headPos.Z += 95f;
+                                float height = Math.Abs(headScreen.Y - feetScreen.Y);
                                 
-                                Vector3 feetPos = player.Position;
-                                feetPos.Z -= 10f;
-                                
-                                if (WorldToScreen(headPos, out Vector2 headScreen) && WorldToScreen(feetPos, out Vector2 feetScreen))
+                                float minHeight = 50f;
+                                if (height < minHeight)
                                 {
-                                    float height = Math.Abs(headScreen.Y - feetScreen.Y);
-                                    
-                                    float minHeight = 50f;
-                                    if (height < minHeight)
-                                    {
-                                        height = minHeight;
-                                    }
-                                    
-                                    float width = height * 0.4f;
-
-                                    float boxTop = headScreen.Y;
-                                    float boxBottom = feetScreen.Y;
-                                    
-                                    if (Math.Abs(headScreen.Y - feetScreen.Y) < minHeight)
-                                    {
-                                        float boxCenter = (headScreen.Y + feetScreen.Y) / 2;
-                                        boxTop = boxCenter - height / 2;
-                                        boxBottom = boxCenter + height / 2;
-                                    }
-
-                                    Vector2 topLeft = new Vector2(feetScreen.X - width / 2, boxTop);
-                                    Vector2 bottomRight = new Vector2(feetScreen.X + width / 2, boxBottom);
-
-                                    drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
-                                    
-                                    string distText = $"{player.Distance:F0}m";
-                                    Vector2 textPos = new Vector2(feetScreen.X - 15, topLeft.Y - 15);
-                                    drawList.AddText(textPos, 0xFFFFFFFF, distText);
+                                    height = minHeight;
                                 }
+                                
+                                float width = height * 0.4f;
+
+                                float boxTop = headScreen.Y;
+                                float boxBottom = feetScreen.Y;
+                                
+                                if (Math.Abs(headScreen.Y - feetScreen.Y) < minHeight)
+                                {
+                                    float boxCenter = (headScreen.Y + feetScreen.Y) / 2;
+                                    boxTop = boxCenter - height / 2;
+                                    boxBottom = boxCenter + height / 2;
+                                }
+
+                                Vector2 topLeft = new Vector2(feetScreen.X - width / 2, boxTop);
+                                Vector2 bottomRight = new Vector2(feetScreen.X + width / 2, boxBottom);
+
+                                drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
+                                
+                                string distText = $"{player.Distance:F0}m";
+                                Vector2 textPos = new Vector2(feetScreen.X - 15, topLeft.Y - 15);
+                                drawList.AddText(textPos, 0xFFFFFFFF, distText);
                             }
                         }
                     }
@@ -372,7 +418,7 @@ namespace SplitExt
                         TeamId = teamId,
                         Distance = dist,
                         Health = health,
-                        IsEnemy = (cachedLocalTeamId != -1 && teamId != 255 && teamId != cachedLocalTeamId)
+                        IsEnemy = (cachedLocalTeamId == 255) ? true : (cachedLocalTeamId != -1 && teamId != 255 && teamId != cachedLocalTeamId)
                     });
                 }
             }
@@ -459,7 +505,7 @@ namespace SplitExt
 
         private void HandleInput()
         {
-            // Rechtsklick Check (0x02 = Right Mouse Button)
+            // Right mouse button bruuhj
             if ((GetAsyncKeyState(0x02) & 0x8000) != 0)
             {
                 rightMousePressed = true;

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "myj8YwWbEWE=",
+  "dgSpecHash": "tbn7+8t72+E=",
   "success": true,
   "projectFilePath": "E:\\.Projects\\Splitgate\\Splitgate\\Splitgate.csproj",
   "expectedPackageFiles": [
@@ -20,7 +20,7 @@
     {
       "code": "NU1603",
       "level": "Warning",
-      "message": "Splitgate depends on ClickableTransparentOverlay (>= 8.1.2) but ClickableTransparentOverlay 8.1.2 was not found. ClickableTransparentOverlay 9.0.0 was resolved instead.",
+      "message": "firefox depends on ClickableTransparentOverlay (>= 8.1.2) but ClickableTransparentOverlay 8.1.2 was not found. ClickableTransparentOverlay 9.0.0 was resolved instead.",
       "projectPath": "E:\\.Projects\\Splitgate\\Splitgate\\Splitgate.csproj",
       "warningLevel": 1,
       "filePath": "E:\\.Projects\\Splitgate\\Splitgate\\Splitgate.csproj",
