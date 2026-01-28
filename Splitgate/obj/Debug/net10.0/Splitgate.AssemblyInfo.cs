@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("Splitgate")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f78ec47ab563d951c0d6fbb14702c7f1e9b70f84")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+98a194140ff552c798f25aa9f344c86c8f43d152")]
 [assembly: System.Reflection.AssemblyProductAttribute("Splitgate")]
 [assembly: System.Reflection.AssemblyTitleAttribute("Splitgate")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -65,6 +65,7 @@ namespace SplitExt
         private bool insertKeyPressed = false;
         private bool enableTraceLines = true;
         private bool enableBoxes = false;
+        private bool rightMousePressed = false;
 
         public External_Main() : base()
         {
@@ -119,20 +120,40 @@ namespace SplitExt
                             if (enableBoxes)
                             {
                                 Vector3 headPos = player.Position;
-                                headPos.Z += 70f;
+                                headPos.Z += 95f;
                                 
-                                if (WorldToScreen(headPos, out Vector2 headScreen))
+                                Vector3 feetPos = player.Position;
+                                feetPos.Z -= 10f;
+                                
+                                if (WorldToScreen(headPos, out Vector2 headScreen) && WorldToScreen(feetPos, out Vector2 feetScreen))
                                 {
-                                    float height = Math.Abs(headScreen.Y - screenPos.Y);
+                                    float height = Math.Abs(headScreen.Y - feetScreen.Y);
+                                    
+                                    float minHeight = 50f;
+                                    if (height < minHeight)
+                                    {
+                                        height = minHeight;
+                                    }
+                                    
                                     float width = height * 0.4f;
 
-                                    Vector2 topLeft = new Vector2(screenPos.X - width / 2, headScreen.Y);
-                                    Vector2 bottomRight = new Vector2(screenPos.X + width / 2, screenPos.Y);
+                                    float boxTop = headScreen.Y;
+                                    float boxBottom = feetScreen.Y;
+                                    
+                                    if (Math.Abs(headScreen.Y - feetScreen.Y) < minHeight)
+                                    {
+                                        float boxCenter = (headScreen.Y + feetScreen.Y) / 2;
+                                        boxTop = boxCenter - height / 2;
+                                        boxBottom = boxCenter + height / 2;
+                                    }
+
+                                    Vector2 topLeft = new Vector2(feetScreen.X - width / 2, boxTop);
+                                    Vector2 bottomRight = new Vector2(feetScreen.X + width / 2, boxBottom);
 
                                     drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
                                     
                                     string distText = $"{player.Distance:F0}m";
-                                    Vector2 textPos = new Vector2(screenPos.X - 15, topLeft.Y - 15);
+                                    Vector2 textPos = new Vector2(feetScreen.X - 15, topLeft.Y - 15);
                                     drawList.AddText(textPos, 0xFFFFFFFF, distText);
                                 }
                             }
@@ -214,7 +235,8 @@ namespace SplitExt
                 {
                     bool foundValidCamera = false;
                     
-                    if (foundCameraOffset == -1)
+                    // idk why but sometimes the offset becomes invalid during gameplay
+                    if (foundCameraOffset == -1 && !rightMousePressed)
                     {
                         for (int offset = 0; offset < 0x2000; offset += 0x4)
                         {
@@ -260,14 +282,17 @@ namespace SplitExt
                         cameraFov = ReadFloat(camMgr + foundCameraOffset + 0x18);
                         
                         if (!float.IsNaN(cameraPosition.X) && !float.IsNaN(cameraRotation.X) &&
-                            cameraFov > 60 && cameraFov < 150 && Math.Abs(cameraRotation.X) < 90)
+                            cameraFov > 10 && cameraFov < 150 && Math.Abs(cameraRotation.X) < 90)
                         {
                             foundValidCamera = true;
                         }
                         else
                         {
-                            foundCameraOffset = -1;
-                            Console.WriteLine("[-] Camera offset became invalid, rescanning...");
+                            if (!rightMousePressed)
+                            {
+                                foundCameraOffset = -1;
+                                Console.WriteLine("[-] Camera offset became invalid, rescanning...");
+                            }
                         }
                     }
                     
@@ -298,7 +323,6 @@ namespace SplitExt
                         localPosition = ReadVector3(root + OFFSET_RelativeLocation);
                     }
                     
-                    // local health idk
                     localHealth = ReadFloat(localPawn + OFFSET_Health);
                 }
 
@@ -435,6 +459,16 @@ namespace SplitExt
 
         private void HandleInput()
         {
+            // Rechtsklick Check (0x02 = Right Mouse Button)
+            if ((GetAsyncKeyState(0x02) & 0x8000) != 0)
+            {
+                rightMousePressed = true;
+            }
+            else
+            {
+                rightMousePressed = false;
+            }
+            
             if ((GetAsyncKeyState(0x2D) & 0x8000) != 0) // Insert key bru
             {
                 if (!insertKeyPressed) 
