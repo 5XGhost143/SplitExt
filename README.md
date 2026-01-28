@@ -5,7 +5,7 @@ SplitExt is an external cheat for **Splitgate (Splitgate 1 / Legacy)**.
 ## Features
 - ESP (Traces, Boxes)
 - Aimbot
-- MISC (Host only)
+- MISC (Host only) - LATER 
 
 ## Disclaimer
 
