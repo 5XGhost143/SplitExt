@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("firefox")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+15221327a402a9be84caa4268c85ca53c8862f9a")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+8da41d1a7d9204cca1cdd0f38e0decfd6948d88c")]
 [assembly: System.Reflection.AssemblyProductAttribute("firefox")]
 [assembly: System.Reflection.AssemblyTitleAttribute("firefox")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
