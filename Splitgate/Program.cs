@@ -106,7 +106,7 @@ namespace SplitExt
 
             var drawList = ImGui.GetWindowDrawList();
 
-            rainbowHue += 2.0f;
+            rainbowHue += 1.5f;
             if (rainbowHue > 360f) rainbowHue = 0f;
 
             string watermarkText = "SplitExt by GhOsT";
