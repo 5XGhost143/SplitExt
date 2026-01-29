@@ -11,7 +11,6 @@ namespace SplitExt
         public static IntPtr baseAddress;
 
         [DllImport("user32.dll")]
-
         public static extern int GetSystemMetrics(int nIndex);
 
         [DllImport("user32.dll")]
@@ -21,12 +20,14 @@ namespace SplitExt
         [DllImport("user32.dll")]
         public static extern short GetAsyncKeyState(int vKey);
 
-
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern IntPtr OpenProcess(int dwDesiredAccess, bool bInheritHandle, int dwProcessId);
 
         [DllImport("kernel32.dll", SetLastError = true)]
         private static extern bool ReadProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int dwSize, out int lpNumberOfBytesRead);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool WriteProcessMemory(IntPtr hProcess, IntPtr lpBaseAddress, byte[] lpBuffer, int nSize, out int lpNumberOfBytesWritten);
 
         public static bool AttachToProcess(string processName, out IntPtr procHandle, out IntPtr moduleBase)
         {
@@ -40,7 +41,7 @@ namespace SplitExt
                 return false;
             }
 
-            procHandle = OpenProcess(0x0010 | 0x0400, false, procs[0].Id); // PROCESS_VM_READ | PROCESS_QUERY_INFORMATION
+            procHandle = OpenProcess(0x0010 | 0x0020 | 0x0400, false, procs[0].Id);
             if (procHandle == IntPtr.Zero)
             {
                 Console.WriteLine("[-] Failed to open process handle");
@@ -107,6 +108,34 @@ namespace SplitExt
                 ReadFloat(address + 4),
                 ReadFloat(address + 8)
             );
+        }
+
+        public static bool WriteInt64(long address, long value)
+        {
+            if (address == 0) return false;
+            byte[] buffer = BitConverter.GetBytes(value);
+            return WriteProcessMemory(processHandle, (IntPtr)address, buffer, buffer.Length, out _);
+        }
+
+        public static bool WriteInt32(long address, int value)
+        {
+            if (address == 0) return false;
+            byte[] buffer = BitConverter.GetBytes(value);
+            return WriteProcessMemory(processHandle, (IntPtr)address, buffer, buffer.Length, out _);
+        }
+
+        public static bool WriteFloat(long address, float value)
+        {
+            if (address == 0) return false;
+            byte[] buffer = BitConverter.GetBytes(value);
+            return WriteProcessMemory(processHandle, (IntPtr)address, buffer, buffer.Length, out _);
+        }
+
+        public static bool WriteByte(long address, byte value)
+        {
+            if (address == 0) return false;
+            byte[] buffer = new byte[] { value };
+            return WriteProcessMemory(processHandle, (IntPtr)address, buffer, buffer.Length, out _);
         }
 
         public static IntPtr BaseAddress => baseAddress;
