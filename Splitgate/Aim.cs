@@ -43,10 +43,9 @@ namespace SplitExt
             if (players.Count == 0 || !EnableAimbot) return;
 
             Vector2 screenCenter = new Vector2(screenWidth / 2, screenHeight / 2);
-            UPlayerInfo? closestPlayer = null;
+            
             float closestDistance = float.MaxValue;
-            Vector2 closestScreenPos = Vector2.Zero;
-
+            
             foreach (var player in players)
             {
                 if (!player.IsEnemy || player.Health <= 0) continue;
@@ -65,15 +64,46 @@ namespace SplitExt
                     if (distanceToCenter < AimbotFOV && distanceToCenter < closestDistance)
                     {
                         closestDistance = distanceToCenter;
-                        closestPlayer = player;
-                        closestScreenPos = screenPos;
                     }
                 }
             }
 
-            if (closestPlayer.HasValue)
+            if (closestDistance == float.MaxValue) return;
+
+            UPlayerInfo? targetPlayer = null;
+            float lowestHealth = float.MaxValue;
+            Vector2 targetScreenPos = Vector2.Zero;
+
+            foreach (var player in players)
             {
-                Vector2 delta = closestScreenPos - screenCenter;
+                if (!player.IsEnemy || player.Health <= 0) continue;
+
+                Vector3 headPos = player.Position;
+                headPos.Z += 80f;
+
+                if (WorldToScreen(headPos, out Vector2 screenPos))
+                {
+                    if (screenPos.X < 0 || screenPos.X > screenWidth ||
+                        screenPos.Y < 0 || screenPos.Y > screenHeight)
+                        continue;
+
+                    float distanceToCenter = Vector2.Distance(screenCenter, screenPos);
+
+                    if (Math.Abs(distanceToCenter - closestDistance) < 0.1f)
+                    {
+                        if (player.Health < lowestHealth)
+                        {
+                            lowestHealth = player.Health;
+                            targetPlayer = player;
+                            targetScreenPos = screenPos;
+                        }
+                    }
+                }
+            }
+
+            if (targetPlayer.HasValue)
+            {
+                Vector2 delta = targetScreenPos - screenCenter;
 
                 int moveX = (int)(delta.X / AimbotSmoothing);
                 int moveY = (int)(delta.Y / AimbotSmoothing);
