@@ -1,0 +1,33 @@
+name: SplitExt Build
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  publish:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Restore
+      run: dotnet restore
+
+    - name: Publish (Release)
+      run: dotnet publish -c Release --no-restore
+
+    - name: Upload publish artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: publish-output
+        path: |
+          **/bin/Release/**/publish
