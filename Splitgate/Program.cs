@@ -74,10 +74,6 @@ namespace SplitExt
             Console.WriteLine($"[OFFSET] CurrentAmmo: 0x{Offsets.CurrentAmmo:X}");
             Console.WriteLine($"[OFFSET] CurrentAmmoInClip: 0x{Offsets.CurrentAmmoInClip:X}");
             Console.WriteLine($"[OFFSET] CurrentWeapon: 0x{Offsets.CurrentWeapon:X}");
-            Console.WriteLine($"[OFFSET] verticalRecoilAmount: 0x{Offsets.verticalRecoilAmount:X}");
-            Console.WriteLine($"[OFFSET] horizontalRecoilAmount: 0x{Offsets.horizontalRecoilAmount:X}");
-            Console.WriteLine($"[OFFSET] recoilKick: 0x{Offsets.recoilKick:X}");
-            Console.WriteLine($"[OFFSET] visualRecoil: 0x{Offsets.visualRecoil:X}");
         }
 
         static void Main(string[] args)

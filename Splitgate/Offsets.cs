@@ -21,11 +21,5 @@ namespace SplitExt
         public const int  CurrentAmmo              = 0x302; // AGun
         public const int  CurrentAmmoInClip              = 0x304; // AGun
         public const int  CurrentWeapon              = 0x800; // AGun
-        public const int  verticalRecoilAmount    = 0x8; // FRecoilData
-        public const int  horizontalRecoilAmount    = 0xc; // FRecoilData
-        public const int  recoilKick    = 0x10; // FRecoilData
-        public const int  visualRecoil    = 0x14; // FRecoilData
-
-
     }
 }
