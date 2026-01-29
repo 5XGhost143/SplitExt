@@ -115,7 +115,7 @@ namespace SplitExt
             float textY = 5f;
             RenderRainbowTextAtPosition(watermarkText, new Vector2(textX, textY), rainbowHue);
 
-            esp.RenderESP(players);
+            esp.RenderESP(players, rainbowHue);
 
             ImGui.End();
 

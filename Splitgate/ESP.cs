@@ -37,7 +37,7 @@ namespace SplitExt
             cameraFov = fov;
         }
 
-        public void RenderESP(List<UPlayerInfo> players)
+        public void RenderESP(List<UPlayerInfo> players, float rainbowHue)
         {
             if (!EnableTraceLines && !EnableBoxes) return;
 
@@ -91,12 +91,57 @@ namespace SplitExt
 
                             drawList.AddRect(topLeft, bottomRight, 0xFF0000FF, 0f, ImDrawFlags.None, 1.5f);
 
-                            string distText = $"{player.Distance:F0}m";
-                            Vector2 textPos = new Vector2(feetScreen.X - 15, topLeft.Y - 15);
-                            drawList.AddText(textPos, 0xFFFFFFFF, distText);
+                            string hpText = $"{player.Health:F0} HP";
+                            Vector2 textSize = ImGui.CalcTextSize(hpText);
+                            Vector2 textPos = new Vector2(feetScreen.X - textSize.X / 2, topLeft.Y - 15);
+                            
+                            RenderRainbowTextAtPosition(hpText, textPos, rainbowHue, drawList);
                         }
                     }
                 }
+            }
+        }
+
+        private void RenderRainbowTextAtPosition(string text, Vector2 position, float startHue, ImDrawListPtr drawList)
+        {
+            float charOffset = 0f;
+            for (int i = 0; i < text.Length; i++)
+            {
+                string character = text[i].ToString();
+                Vector2 charSize = ImGui.CalcTextSize(character);
+
+                float charHue = (startHue + (i * 15f)) % 360f;
+
+                float h = charHue / 60f;
+                int sector = (int)Math.Floor(h);
+                float f = h - sector;
+
+                float v = 1f;
+                float s = 1f;
+
+                float p = v * (1f - s);
+                float q = v * (1f - s * f);
+                float t = v * (1f - s * (1f - f));
+
+                float r = 0, g = 0, b = 0;
+
+                switch (sector % 6)
+                {
+                    case 0: r = v; g = t; b = p; break;
+                    case 1: r = q; g = v; b = p; break;
+                    case 2: r = p; g = v; b = t; break;
+                    case 3: r = p; g = q; b = v; break;
+                    case 4: r = t; g = p; b = v; break;
+                    case 5: r = v; g = p; b = q; break;
+                }
+
+                uint color = 0xFF000000 |
+                           ((uint)(b * 255) << 16) |
+                           ((uint)(g * 255) << 8) |
+                           (uint)(r * 255);
+
+                drawList.AddText(new Vector2(position.X + charOffset, position.Y), color, character);
+                charOffset += charSize.X;
             }
         }
 
